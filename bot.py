@@ -35,10 +35,37 @@ async def on_presence_update(before, after):
         changes = []
         if before.status != after.status:
             changes.append(f"cambió su **estado** de `{before.status}` a `{after.status}`")
+        
+        # Verificar cambios en actividades con más detalle
         if before.activities != after.activities:
-            changes.append(f"cambió su **actividad**.")
+            # Si hay actividades actuales
+            if after.activities:
+                activity_details = []
+                for activity in after.activities:
+                    if activity.type == discord.ActivityType.playing:
+                        activity_details.append(f"jugando a **{activity.name}**")
+                    elif activity.type == discord.ActivityType.streaming:
+                        activity_details.append(f"transmitiendo **{activity.name}**")
+                    elif activity.type == discord.ActivityType.listening:
+                        activity_details.append(f"escuchando **{activity.name}**")
+                    elif activity.type == discord.ActivityType.watching:
+                        activity_details.append(f"viendo **{activity.name}**")
+                    elif activity.type == discord.ActivityType.custom:
+                        if activity.name:
+                            activity_details.append(f"con estado personalizado **{activity.name}**")
+                    else:
+                        activity_details.append(f"con actividad **{activity.name}**")
+                
+                if activity_details:
+                    changes.append(f"ahora está {', '.join(activity_details)}")
+                else:
+                    changes.append(f"cambió su **actividad**")
+            else:
+                # Si no hay actividades actuales pero había antes
+                changes.append(f"dejó de realizar actividades")
+        
         if changes:
-            channel = discord.utils.get(after.guild.text_channels, name="general")  # Cambia esto si quieres usar otro canal
+            channel = discord.utils.get(after.guild.text_channels, name="botargas")  # Cambia esto si quieres usar otro canal
             if channel:
                 await channel.send(f"{after.display_name} " + " y ".join(changes))
 

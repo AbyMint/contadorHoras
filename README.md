@@ -1,6 +1,6 @@
 # Bot de Discord para Seguimiento de Presencias
 
-Este bot de Discord permite a los usuarios seguir los cambios de presencia de otros miembros en un servidor. Los usuarios pueden ser "seguros" para recibir notificaciones cuando cambian su estado o actividad.
+Este bot de Discord permite a los usuarios seguir los cambios de presencia de otros miembros en un servidor con el proposito de llevar un control de el tiempo de juego de los usuarios.
 
 ## Características
 
@@ -34,6 +34,7 @@ Este bot de Discord permite a los usuarios seguir los cambios de presencia de ot
    ```
 
 - Usa el comando `!track @usuario` en Discord para comenzar a seguir a un miembro.
+- Usa el comando `!untrack @usuario` para dejar de seguir a un miembro.
 
 ## Contribuciones
 
