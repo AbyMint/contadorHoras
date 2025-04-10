@@ -6,7 +6,8 @@ Este bot de Discord permite a los usuarios seguir los cambios de presencia de ot
 
 - Seguimiento de cambios de estado (en línea, ausente, etc.).
 - Notificaciones en un canal específico cuando un usuario seguido cambia su estado o actividad.
-- Comando para comenzar a seguir a un miembro.
+- Registro del tiempo de juego para cada juego que los usuarios rastreados juegan.
+- Visualización del tiempo total jugado por juego para cada usuario.
 
 ## Instalación
 
@@ -33,8 +34,13 @@ Este bot de Discord permite a los usuarios seguir los cambios de presencia de ot
    python bot.py
    ```
 
-- Usa el comando `!track @usuario` en Discord para comenzar a seguir a un miembro.
-- Usa el comando `!untrack @usuario` para dejar de seguir a un miembro.
+## Comandos disponibles
+- !track [@usuario]: Comienza a seguir a un usuario y registrar su tiempo de juego. Si no se especifica un usuario, se seguirá al autor del comando.
+- !untrack [@usuario]: Deja de seguir a un usuario y elimina su registro de tiempo de juego. Si no se especifica un usuario, se dejará de seguir al autor del comando.
+- !playtime [@usuario]: Muestra el tiempo total jugado en cada juego para el usuario especificado. Si no se especifica un usuario, se mostrará la información del autor del comando.
+## Funcionamiento
+El bot registra automáticamente cuando un usuario comienza y termina de jugar a un juego, calculando el tiempo total jugado. Las actualizaciones de presencia se notifican en el canal "botargas" del servidor.
+
 
 ## Contribuciones
 
