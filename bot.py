@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import os
+import json
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
@@ -14,24 +15,108 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 tracked_users = set()
 user_game_times = {}  # Dictionary to track playtime {user_id: {game_name: {"start_time": datetime, "total_time": timedelta}}}
 
+def save_game_data():
+    """Guarda los datos de tiempo de juego en un archivo JSON."""
+    data_to_save = {}
+    
+    # Convertir los datos a un formato serializable
+    for user_id, games in user_game_times.items():
+        data_to_save[str(user_id)] = {}
+        for game_name, game_data in games.items():
+            # Convertir timedelta a segundos para poder serializarlo
+            total_seconds = game_data["total_time"].total_seconds()
+            # Convertir datetime a string ISO si existe
+            start_time = None
+            if game_data["start_time"]:
+                start_time = game_data["start_time"].isoformat()
+                
+            data_to_save[str(user_id)][game_name] = {
+                "total_time": total_seconds,
+                "start_time": start_time
+            }
+    
+    # Guardar en el archivo
+    with open("game_data.json", "w") as f:
+        json.dump(data_to_save, f)
+    print(f"[DEBUG] Datos guardados en game_data.json")
+
+def load_game_data():
+    """Carga los datos de tiempo de juego desde un archivo JSON."""
+    global user_game_times, tracked_users
+    
+    if not os.path.exists("game_data.json"):
+        print("[DEBUG] No existe archivo de datos previo")
+        return
+    
+    try:
+        with open("game_data.json", "r") as f:
+            data = json.load(f)
+        
+        # Convertir los datos al formato usado por el bot
+        for user_id_str, games in data.items():
+            user_id = int(user_id_str)
+            tracked_users.add(user_id)  # Añadir usuario a la lista de seguimiento
+            user_game_times[user_id] = {}
+            
+            for game_name, game_data in games.items():
+                # Convertir segundos a timedelta
+                total_time = timedelta(seconds=game_data["total_time"])
+                # Convertir string ISO a datetime si existe
+                start_time = None
+                if game_data["start_time"]:
+                    start_time = datetime.fromisoformat(game_data["start_time"])
+                
+                user_game_times[user_id][game_name] = {
+                    "total_time": total_time,
+                    "start_time": start_time
+                }
+        
+        print(f"[DEBUG] Datos cargados desde game_data.json: {len(user_game_times)} usuarios")
+    except Exception as e:
+        print(f"[ERROR] Error al cargar datos: {e}")
+
+
+@tasks.loop(minutes=5)
+async def backup_data():
+    """Guarda los datos cada 5 minutos."""
+    save_game_data()
+    print(f"[DEBUG] Respaldo automático de datos completado: {datetime.now()}")
+
 @bot.event
 async def on_ready():
     print(f"Conectado como {bot.user}.")
+    # Cargar datos guardados
+    load_game_data()
+    # Iniciar la tarea de respaldo
+    backup_data.start()
 
 @bot.command()
 async def track(ctx, member: discord.Member = None):
     member = member or ctx.author
     tracked_users.add(member.id)
     user_game_times[member.id] = {}  # Initialize game tracking for the user
+    
+    # Verificar si el usuario está jugando actualmente
+    for activity in member.activities:
+        if activity.type == discord.ActivityType.playing:
+            track_game_time(member.id, activity.name)
+            await ctx.send(f"Detectado que {member.display_name} está jugando a {activity.name}. Iniciando seguimiento.")
+    
     await ctx.send(f"Ahora estoy siguiendo los cambios de presencia de {member.display_name}.")
+    # Guardar datos después de añadir un nuevo usuario
+    save_game_data()
 
 @bot.command()
 async def untrack(ctx, member: discord.Member = None):
     member = member or ctx.author
     if member.id in tracked_users:
+        # Detener seguimiento de juegos activos
+        stop_all_games(member.id)
         tracked_users.remove(member.id)
-        user_game_times.pop(member.id, None)  # Remove game tracking for the user
+        # No eliminamos los datos de juego para mantener el historial
         await ctx.send(f"He dejado de seguir los cambios de presencia de {member.display_name}.")
+        # Guardar datos después de dejar de seguir
+        save_game_data()
     else:
         await ctx.send(f"{member.display_name} no estaba siendo seguid@.")
 
@@ -102,7 +187,6 @@ async def on_presence_update(before, after):
                         activity_details.append(f"jugando a **{activity.name}**")
                         # Track playtime
                         track_game_time(after.id, activity.name)
-                    # [resto del código para otros tipos de actividades]
                 
                 if activity_details:
                     changes.append(f"ahora está {', '.join(activity_details)}")
