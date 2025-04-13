@@ -110,7 +110,10 @@ async def save(ctx):
 async def track(ctx, member: discord.Member = None):
     member = member or ctx.author
     tracked_users.add(member.id)
-    user_game_times[member.id] = {}  # Initialize game tracking for the user
+    
+    # Only initialize if the user is not already in the dictionary
+    if member.id not in user_game_times:
+        user_game_times[member.id] = {}  # Initialize game tracking for the user
     
     # Verificar si el usuario está jugando actualmente
     for activity in member.activities:
