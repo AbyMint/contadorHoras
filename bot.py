@@ -23,8 +23,16 @@ def save_game_data():
     for user_id, games in user_game_times.items():
         data_to_save[str(user_id)] = {}
         for game_name, game_data in games.items():
+            # Antes de guardar, actualizar el tiempo total si hay una sesión activa
+            total_time = game_data["total_time"]
+            if game_data["start_time"] is not None:
+                now = datetime.now(timezone.utc)
+                current_session = now - game_data["start_time"]
+                # Para guardar, sumamos el tiempo actual pero no modificamos el objeto original
+                total_time = total_time + current_session
+                
             # Convertir timedelta a segundos para poder serializarlo
-            total_seconds = game_data["total_time"].total_seconds()
+            total_seconds = total_time.total_seconds()
             # Convertir datetime a string ISO si existe
             start_time = None
             if game_data["start_time"]:
@@ -37,7 +45,7 @@ def save_game_data():
     
     # Guardar en el archivo
     with open("game_data.json", "w") as f:
-        json.dump(data_to_save, f)
+        json.dump(data_to_save, f, indent=4)  # Añadir indentación para legibilidad
     print(f"[DEBUG] Datos guardados en game_data.json")
 
 def load_game_data():
@@ -87,8 +95,16 @@ async def on_ready():
     print(f"Conectado como {bot.user}.")
     # Cargar datos guardados
     load_game_data()
+    print(f"[DEBUG] Usuarios cargados: {tracked_users}")
+    print(f"[DEBUG] Datos de juego cargados: {user_game_times}")
     # Iniciar la tarea de respaldo
     backup_data.start()
+
+@bot.command()
+async def save(ctx):
+    """Fuerza el guardado de datos de tiempo de juego."""
+    save_game_data()
+    await ctx.send("Datos de tiempo de juego guardados correctamente.")
 
 @bot.command()
 async def track(ctx, member: discord.Member = None):
@@ -113,8 +129,9 @@ async def untrack(ctx, member: discord.Member = None):
         # Detener seguimiento de juegos activos
         stop_all_games(member.id)
         tracked_users.remove(member.id)
-        # No eliminamos los datos de juego para mantener el historial
-        await ctx.send(f"He dejado de seguir los cambios de presencia de {member.display_name}.")
+        # NO eliminamos los datos de juego para mantener el historial
+        # user_game_times.pop(member.id, None)  <- Esta línea se elimina
+        await ctx.send(f"He dejado de seguir los cambios de presencia de {member.display_name}. Se ha guardado su historial de tiempo de juego.")
         # Guardar datos después de dejar de seguir
         save_game_data()
     else:
@@ -144,12 +161,36 @@ async def playtime(ctx, member: discord.Member = None):
         if data["start_time"] is not None:
             current_session = now - data["start_time"]
             print(f"[DEBUG] Juego {game} en sesión activa. Tiempo actual: {current_session}")
-            current_total = total_time + current_session
-            response += f"- **{game}**: {str(total_time)} + {str(current_session)} (sesión actual) = {str(current_total)}\n"
+            total_with_current = total_time + current_session
+            # Mostrar el tiempo total (acumulado + sesión actual)
+            response += f"- **{game}**: {format_time(total_with_current)} (incluye sesión actual de {format_time(current_session)})\n"
         else:
-            response += f"- **{game}**: {str(total_time)}\n"
+            response += f"- **{game}**: {format_time(total_time)}\n"
 
     await ctx.send(response)
+
+def format_time(td):
+    """Formatea un timedelta en un formato más legible."""
+    # Obtener días, horas, minutos y segundos
+    days = td.days
+    hours, remainder = divmod(td.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    # Crear una cadena formateada
+    parts = []
+    if days > 0:
+        parts.append(f"{days} día{'s' if days != 1 else ''}")
+    if hours > 0:
+        parts.append(f"{hours} hora{'s' if hours != 1 else ''}")
+    if minutes > 0:
+        parts.append(f"{minutes} minuto{'s' if minutes != 1 else ''}")
+    if seconds > 0 and days == 0 and hours == 0:  # Solo mostrar segundos si no hay días ni horas
+        parts.append(f"{seconds} segundo{'s' if seconds != 1 else ''}")
+    
+    if not parts:  # Si no hay tiempo (menos de un segundo)
+        return "menos de un segundo"
+    
+    return ", ".join(parts)
 
 
 @bot.event
@@ -219,11 +260,14 @@ def track_game_time(user_id, game_name):
         print(f"[DEBUG] Estado actual: {user_games[game_name]}")
     else:
         print(f"[DEBUG] Juego {game_name} ya estaba en seguimiento, estado actual: {user_games[game_name]}")
-        # If already tracking, update the start time
+        # Si ya estamos siguiendo este juego, solo actualizamos el tiempo de inicio si no está activo
         if user_games[game_name]["start_time"] is None:
             print(f"[DEBUG] Reiniciando seguimiento para {game_name}")
             user_games[game_name]["start_time"] = now
             print(f"[DEBUG] Nuevo estado: {user_games[game_name]}")
+    
+    # Guardar datos después de iniciar seguimiento
+    save_game_data()
 
 def stop_all_games(user_id):
     now = datetime.now(timezone.utc)
@@ -240,6 +284,8 @@ def stop_all_games(user_id):
                 print(f"[DEBUG] Nuevo tiempo total para {game}: {data['total_time']}")
             else:
                 print(f"[DEBUG] Juego {game} no estaba activo (start_time es None)")
+        # Guardar datos después de detener juegos
+        save_game_data()
     else:
         print(f"[DEBUG] Usuario {user_id} no tiene juegos en seguimiento")
 
